@@ -1,0 +1,280 @@
+#!/bin/bash
+#Author	: shaun.hong@lge.com
+#Date	: 2012-02-16
+#Program: chkgit(check branch and/or tag)
+#Object	: I need to check wrong branch and tag
+
+# See also
+# repo forall -p -c git tag -v {tag_name} | cat
+# repo forall -p -c git tag -l {tag_name} | cat
+
+# Parameter Description
+# $1 : As you want to check type('tag' or 'branch')
+# $2 : As you want to check branch or tag
+
+
+#modification history
+# date			author				comment
+###################################################################
+# 2014/04/29    shaun.hong@lge.com    add check whitespace
+# 2012/04/23	shaun.hong@lge.com    add check rebase(rebase-applay)
+# 2012/04/19	shaun.hong@lge.com    change check_branch()
+# 2012/04/05	shaun.hong@lge.com    add check tag
+# 2012/02/16	shaun.hong@lge.com    add check branch
+# 2012/02/16	shaun.hong@lge.com    init
+
+
+#current directory
+CWD=$(pwd)
+
+function help()
+{
+	echo "USAGE :"
+	echo "	\$chkgit <'branch' or 'tag'> <branch_name or tag_name> <option>" 
+	echo "	ex)" 
+	echo "	\$chkgit branch android-4.0.1" 
+	echo "	\$chkgit branch android-4.0.1 --exist" 
+	echo "	\$chkgit branch android-4.0.1 --noexist" 		
+	echo "	\$chkgit tag android-4.0.1" 
+	echo "	\$chkgit tag android-4.0.1 --exist" 
+	echo "	\$chkgit tag android-4.0.1 --noexist" 	
+	echo "	\$chkgit rebase"
+	echo "	\$chkgit whitespace"
+	exit 0
+}
+
+#$1 : error type
+#$2 : msg
+function print()
+{
+	if [ -z "$1" ]; then
+		echo -e "\e[31mError : parameter\e[m"
+	fi
+
+	if [ "$1" = "error" ]; then
+		echo -e "\e[31m$2\e[m"
+	fi
+}
+
+function check_whitespace()
+{
+    # search and count with ^+(whitespace)
+    # see also git show --check
+    git show --check | grep ^+
+    echo "--------------------------------------"
+    var=`git show --check | grep ^+ | wc -l`
+    if [ $var -gt 0 ] ; then    
+        echo "Error!! Found whitespace(${var} Lines)!!"
+        exit 1
+    fi
+}
+
+function check_tag()
+{
+	# search project working directory
+	echo "Requested tag checking..."
+	
+	while :
+	do
+		search_wdir=`ls -la | grep .repo | wc -l`
+		if [ "$search_wdir" = 1 ]; then
+			echo "your working path : $(pwd)"
+			wdir_path=$(pwd)
+			break 1
+		else
+			cd ..
+		fi
+	done
+
+	# check git project without requested tag
+	local cnt=0
+	project_list=`repo list | cut -f1 -d:`
+	for git_path in $project_list
+	do
+		((cnt=cnt+1))
+		if [ -z ${EXIST} ];then
+			echo "git($cnt):$git_path"
+		fi
+		cd $wdir_path/$git_path
+		correct=`git tag -l | grep -w "$1" | wc -l`
+		# Print wrong branch
+		# You need to check this git about checkouted branch.
+		if [ -z ${EXIST} ];then
+			if [ "$correct" != 1 ]; then
+				echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+				print error "Please check git : $git_path"
+				echo "There is no your requested tag, please check detail"
+				echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+			fi			
+		else
+			if [ ${EXIST} = "true" ];then
+				if [ "${correct}" = 1 ]; then			
+					echo "git($cnt):$git_path"
+				fi
+			elif [ ${EXIST} = "false" ];then
+				if [ "${correct}" != 1 ]; then			
+					echo "git($cnt):$git_path"
+				fi				
+			fi		
+
+		fi
+
+	done
+}
+
+function check_branch()
+{
+	# parameter backup
+	param1="$1"
+	param2="$2"
+
+	# get current branch 
+	# must be inside with .git directory
+	if [ -z $param1 ]; then
+		current_branch=`git status | grep branch | cut -d' ' -f 4`
+		param1=$current_branch
+	fi
+	
+	# search project working directory
+	echo "Current branch checking..."
+	while :
+	do
+		search_wdir=`ls -la | grep .repo | wc -l`
+		if [ "$search_wdir" = 1 ]; then
+			echo "your working path : $(pwd)"
+			wdir_path=$(pwd)
+			break 1
+		else
+			cd ..
+		fi
+	done
+
+	# check wrong branch
+	local cnt=0
+	project_list=`repo list | cut -f1 -d:`
+	for git_path in $project_list
+	do
+		((cnt=cnt+1))
+		if [ -z ${EXIST} ];then
+			echo "git($cnt):$git_path"
+		fi
+			
+			cd $wdir_path/$git_path
+			correct=`git status | grep -E $param1 | wc -l`
+			# Print wrong branch
+			# You need to check this git about checkouted branch.
+		if [ -z ${EXIST} ];then
+			if [ "$correct" != 1 ]; then
+				echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+				print error "Please check git : $git_path"
+				echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+				git branch
+				echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+			fi			
+		else
+			if [ ${EXIST} = "true" ];then
+				if [ "${correct}" = 1 ]; then			
+					echo "git($cnt):$git_path"
+				fi
+			elif [ ${EXIST} = "false" ];then
+				if [ "${correct}" != 1 ]; then			
+					echo "git($cnt):$git_path"
+				fi				
+			fi		
+
+		fi
+	done
+}
+
+function check_rebase()
+{
+	#repo forall -c test -d .git/rebase-apply && echo "$REPO_PATH : $REPO_PROJECT"
+	
+	# search project working directory
+	echo "Requested tag checking..."
+	
+	while :
+	do
+		search_wdir=`ls -la | grep .repo | wc -l`
+		if [ "$search_wdir" = 1 ]; then
+			echo "your working path : $(pwd)"
+			wdir_path=$(pwd)
+			break 1
+		else
+			cd ..
+		fi
+	done
+
+	# check git project without requested tag
+	local cnt=0
+	project_list=`repo list | cut -f1 -d:`
+	for git_path in $project_list
+	do
+		((cnt=cnt+1))
+		echo "git($cnt):$git_path"
+		cd $wdir_path/$git_path
+		exist=`find . -type d -name rebase-apply | wc -l`
+		# You need to check this git repositary
+		if [ "$exist" == 1 ]; then
+			echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+			print error "Please check git : $git_path"
+#echo "It seems that I cannot create a rebase-apply directory, and\n
+#			 I wonder if you are in the middle of patch application or another\n
+#			 rebase.  If that is not the case, please\n
+#		           rm -fr .git/rebase-apply\n
+#			 and run me again.  I am stopping in case you still have something\n
+#			 valuable there."
+		    echo "rm -fr .git/rebase-apply"
+			echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+		fi
+	done
+}
+
+function finalize()
+{
+	echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+	echo "Done!!"
+	echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+	echo "Thank you for using!"
+	echo "If you have any question,"
+	echo "	send a mail to shaun.hong@lge.com"
+	echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+}
+
+function parse_option()
+{
+	for argument in "$@"
+	do
+		case "$argument" in
+			"--exist")
+			EXIST=true
+			;;
+			"--noexist")
+			EXIST=false
+			;;
+		esac
+	done
+}
+
+function main()
+{
+	if [ "${1}" = "--help" ]; then
+		help
+	fi
+
+	parse_option $@
+	if [ "${1}" = "branch" -o "${1}" = "br" ]; then
+		check_branch ${2}
+	elif [ "${1}" = "tag" ]; then
+		check_tag ${2}
+	elif [ "${1}" = "rebase" ]; then
+		check_rebase
+	elif [ "${1}" = "whitespace" ]; then
+		check_whitespace
+	else
+		help
+	fi
+
+	finalize
+}
+main $@
